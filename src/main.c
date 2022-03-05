@@ -5,10 +5,18 @@
 #include <errno.h>
 #include <stdlib.h>
 
+#include "html.h"
 
 // #define PATH "C:\\Users\\Harshit\\code\\projects\\Booker\\res\\bookmarks.html"
 #define PATH "/mnt/c/Users/Harshit/code/projects/Booker/res/bookmarks.html"
 
+// store the exported bookmarks_contents
+char *b_contents;
+
+void _cleanup()
+{
+	free(b_contents);
+}
 
 char* readFile(const char *path)
 {
@@ -23,7 +31,7 @@ char* readFile(const char *path)
 	uint64_t size = ftell(fd);
 	rewind(fd);
 
-	printf("size is %ld\n", size);
+	// printf("size is %ld\n", size);
 
 	char *contents = malloc(size * sizeof(char) + 1); // 1 for NULL char
 	fread(contents, sizeof(char), size, fd);
@@ -36,11 +44,15 @@ char* readFile(const char *path)
 
 int main(int argc, char *argv[])
 {
-	printf("arg count is %d\n", argc);
-	char* file_contents = readFile(PATH);
-	printf("---------------FILE-START------------\n");
-	printf("%s\n", file_contents);
-	printf("---------------FILE-END------------\n");
-	free(file_contents);
+	atexit(&_cleanup); // return must be 0
+
+	// b_contents = readFile(PATH);
+
+	// printf("---------------FILE-START------------\n");
+	// printf("%s\n", b_contents);
+	// printf("---------------FILE-END------------\n");
+
+	test();
+	
 	return EXIT_SUCCESS;
 }
