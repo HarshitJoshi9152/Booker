@@ -1,4 +1,6 @@
-#define u64 uint16_t
+#include <stdbool.h>
+
+#define u64 uint64_t
 // print string limit
 #define PS_LIMIT 100
 
@@ -27,6 +29,8 @@ typedef struct _node {
 	u64 blocks_count;
 } NODE;
 
+// ig we have a slight data duplication problem with .value and .blocks[i].string
+
 typedef struct _htmldoc {
 	// uint64_t tagCount;
 	NODE *root;
@@ -34,14 +38,16 @@ typedef struct _htmldoc {
 } HTMLDoc;
 
 
-NODE* alloc_node(char* tagName,	char* value, uint64_t childrenCount, NODE **children);
+NODE *alloc_node(char* tagName,	char* value, uint64_t childrenCount, NODE **children);
+NODE *alloc_node_from_blocks(char* tagName, BLOCK **blocks, u64 blocks_count);
 void print_node(NODE *node);
 void free_nodes_rec(NODE *node);
 
 // HTMLDoc parseHtml(const char *raw_html);
 void free_HTML(HTMLDoc *doc);
 
-NODE parse_tag_rec(const char* tag, char** tagEnd);
+NODE *parse_tag_rec(const char* tag, char** tagEnd);
+bool is_void_tag(char *tag_name);
 
 void nodes_test();
 void test();
