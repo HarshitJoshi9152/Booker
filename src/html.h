@@ -11,12 +11,13 @@ enum VAL_TYPE {
 };
 
 struct _node; 	// thats the magic of forward declarations !
+union type_val {
+	struct _node *tag;
+	char *string;
+};
 typedef struct _block {
 	enum VAL_TYPE type;
-	union {
-		struct _node *tag;
-		char *string;
-	} value;
+	union type_val value;
 } BLOCK;
 
 typedef struct _node {
@@ -48,6 +49,9 @@ void free_HTML(HTMLDoc *doc);
 
 NODE *parse_tag_rec(const char* tag, char** tagEnd);
 bool is_void_tag(char *tag_name);
+
+
+BLOCK *alloc_block(enum VAL_TYPE type, union type_val value);
 
 void nodes_test();
 void test();

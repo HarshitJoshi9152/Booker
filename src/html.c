@@ -40,76 +40,6 @@ const u64 MAX_BLOCK_COUNT = 10;
 
 // <parsing html>
 
-/*
-HTMLDoc parseHtml(const char *raw_html) {
-
-	HTMLDoc document = {0};
-	NODE root = *(document.root);
-
-	const u64 length = strlen(raw_html);
-
-	char current_buffer[100] = {0};
-	BUFFER_TYPE current_buffer_type = TAGNAME;
-	u64 count = 0;
-
-	for (u64 i = strchr(raw_html, '<'); i < length; ++i)
-	{
-		// we need to ignore the whitespaces " \n\t\r" etc;
-		char c = raw_html[i];
-		
-		switch (c)
-		{
-			case '<':
-				// change current_buffer to tag buffer ? and make new tag;
-				// tag_recording_starts
-				break;
-			
-			case '>':
-				// tag recording stops
-				break;
-			
-			default:
-				break;
-		}
-
-		// todo: change this line
-		current_buffer[count++] = c;
-	}
-
-	return document;
-}
-
-// starting char must be <
-NODE parse_tag(const char* html)
-{
-	if (*html != '<') return (NODE){0};
-	
-	NODE tag = {0}; // nah use alloc_node;
-
-	char tagName[100] = "";
-	int word_len = wordEnd(html++, tagName);
-	printf("word: %s\n", tagName);
-	
-	html += word_len;
-
-	// next char
-	int over = 0;
-	while(*(html) != '>')
-	{
-		html++;
-		if(over++ > 1000) {
-			fprintf(stderr, "[ERROR]: Unending pool, threshhold passed %s:%d\n", __FILE__, __LINE__);
-			exit(1);
-		}
-	}
-
-
-
-	// tag.value
-	return tag;
-}
-*/
-
 char *alloc_string(char *str, u64 len) {
 	char *p = malloc(len + 1);
 	strncpy(p, str, len);
@@ -178,28 +108,30 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 		}
 
 		// value block allocation.
-		BLOCK *value_block = malloc(sizeof(BLOCK));
-		value_block->type = STRING;
-		value_block->value.string = alloc_string(val_start, val_len);
-
-		// adding the block to blocks array
+		char* value =  alloc_string(val_start, val_len);
+		BLOCK *value_block = alloc_block(STRING, (union type_val){value});
 		blocks[blocks_count++] = value_block;
 
-
-		// PARSING FOUND TAG : value found partially, child tag or ending tag starts
+		// CHILD TAG OR ENDING TAG STARTS
 		// *cursor == '<'
 		char *addr_tag_start = cursor++;
-		char *name_start = cursor; // t = start of tagName '<' ;
-		u64 name_len = 0;
 		bool is_closing_tag = false;
 
-		while(*cursor != '>') {  // not parsing attributes currently
+		while(*cursor == '/' || isspace(*cursor))
+		{
 			if (*cursor == '/') is_closing_tag = true;
-			name_len += 1;
 			cursor++;
 		}
 
-		char *closing_tag_name = alloc_string(name_start, name_len);
+		// *cursor == '(first alpha char !)';
+		char *name_start = cursor; // first char of tagname
+		u64 name_len = 0;
+
+		while(*cursor != '>') {  // not parsing attributes currently
+			name_len += 1;
+			cursor++;
+		}
+		// *cursor == '>' now, which is exactly what we need it to be for going in the next iteration of the loop.
 		// todo: remove
 		// printf("\nCALLED %p %c %s %d\n", cursor, *cursor, closing_tag_name, is_closing_tag);
 
@@ -209,53 +141,40 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 			// then it must be an opening tag !
 			char *addr_child_tag_end;
 			NODE *child_tag = parse_tag_rec(addr_tag_start, &addr_child_tag_end);
-			cursor = addr_child_tag_end;
+			cursor = addr_child_tag_end;	// jumping to the end of the childtag !
 
-			// NODE *child_node = malloc(sizeof(NODE));								// remove after transition
-			// memcpy(child_node, &child_tag, sizeof(child_tag));			// remove after transition
-			
-
-			BLOCK *node_block = malloc(sizeof(BLOCK));
-			node_block->type = TAG;
-			node_block->value.tag = child_tag;
-
+			BLOCK *node_block = alloc_block(TAG, (union type_val){child_tag});
 			blocks[blocks_count++] = node_block;
 
 			children_count++;
 
-		} else {
-			// seperating the name from '/' and other whitespace chars.
-			char *name = strchr(closing_tag_name, '/');					// todo: change variable name ;
-			// when the loop ends the pointing char must be the start of the closing tag name ! (or NULL char);
-			while((*name == '/' || isspace(*name)) && *name != NULL)
+		}
+		else
+		{
+			// CLOSING/VOID tag !
+			char *closing_tag_name = alloc_string(name_start, name_len);
+
+			// check if its actually the matching CLOSING TAG for the opening tag.
+			if (!strcmp(closing_tag_name, opening_tag_name))
 			{
-				// should i check for NULL here then i can print a custom empty tag msg too !
-				name++;
-			}
-
-			// check if name equals opening_tag ie if its the closing_tag.
-			if (!strcmp(name, opening_tag_name)) {
 				tagClosed = true;
-			} else {
-				// if not raise an error or ignore ig.
-				// wait it could still be a singleton with the '/' char !
+				free(closing_tag_name);
+			}
+			else
+			{
+				// VOID TAG
+				bool is_void = is_void_tag(closing_tag_name);
+				// todo: much better to alloc/make the tag here only ! coz its a singelton with '/'
+				// and we will have to work again to seperate '/' and other ws chars from it !
 
-				if (*name != NULL) {
-					bool is_void = is_void_tag(name);
-					// add NODE_BLOCK to blocks ! and do nothing 
-					// todo: much better to alloc/make the tag here only ! coz its a singelton with '/'
-					// and we will have to work again to seperate '/' and other ws chars from it !
-
-					NODE *child_tag = alloc_node(name, NULL, NULL, NULL);
-
-					BLOCK *node_block = malloc(sizeof(BLOCK));
-					node_block->type = TAG;
-					node_block->value.tag = child_tag;
+				if (is_void_tag) {
+					NODE *child_tag = alloc_node(closing_tag_name, NULL, NULL, NULL); // closing_tag_name NEVER GOT ALLOCED !
+					BLOCK *node_block = alloc_block(TAG, (union type_val){child_tag});
 
 					blocks[blocks_count++] = node_block;
-
 					children_count++;
-
+				} else {
+					// it is not a void tag but has a '/' inside it ???
 				}
 			}
 		}
@@ -264,18 +183,6 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 
 	*tagEnd = cursor; // setting pos to last value of cursor. +1 maybe ?
 
-
-	// char* accumulated_value; // loop over all blocks to get accumulated values of both, make a new function for that
-	// char* accumulated_children;
-
-	// NODE parsed_tag = {
-	// 	.tagName = opening_tag_name,
-	// 	.childrenCount = children_count,
-	// 	.value = accumulated_value,
-	// 	.children = accumulated_children,
-	// 	.blocks = blocks,
-	// 	.blocks_count = blocks_count
-	// };
 	NODE *parsed_tag = alloc_node_from_blocks(opening_tag_name, blocks, blocks_count);
 	return parsed_tag;
 
@@ -345,6 +252,14 @@ NODE *alloc_node_from_blocks(char* tagName, BLOCK **blocks, u64 blocks_count)
 	return node;
 }
 
+BLOCK *alloc_block(enum VAL_TYPE type, union type_val value) {
+	BLOCK *block = malloc(sizeof(BLOCK));
+	block->type = type;
+	if (type == STRING) block->value.string = value.string;
+	if (type == TAG) block->value.tag = value.tag;
+	return block;
+}
+
 // </parsing html>
 
 NODE* alloc_node(char* tagName,	char* value, uint64_t childrenCount, NODE **children)
@@ -354,28 +269,38 @@ NODE* alloc_node(char* tagName,	char* value, uint64_t childrenCount, NODE **chil
 	node->value = value;
 	node->childrenCount = childrenCount;
 	node->children = children;
+	node->blocks_count = 0;
+	node->blocks = NULL;
 	return node;
 }
 
 void free_nodes_rec(NODE *node)
 {
+	// printf("Why does it fail !\n");
 	free(node->tagName);
-	free(node->value);
+	// printf("It doesnt !\n");
+	if (node->value != NULL) {
+		free(node->value);
+	}
 
 	// depth first ?
-	for(u64 i = 0; i < node->childrenCount; ++i)
-	{
-		free_nodes_rec(node->children[i]);
+	if (node->children != NULL) {
+		for(u64 i = 0; i < node->childrenCount; ++i)
+		{
+			free_nodes_rec(node->children[i]);
+		}
+		free(node->children);		// i know these are NULLS !
 	}
-	free(node->children);
 
-	for (u64 i = 0; i < node->blocks_count; ++i)
-	{
-		if (node->blocks[i]->type == STRING) free(node->blocks[i]->value.string);
-		// the .tag in type TAG will free themselves in the last free(node) call.
-		free(node->blocks[i]);
+	if (node->blocks != NULL) {
+		for (u64 i = 0; i < node->blocks_count; ++i)
+		{
+			if (node->blocks[i]->type == STRING) free(node->blocks[i]->value.string);
+			// the .tag in type TAG will free themselves in the last free(node) call.
+			free(node->blocks[i]);
+		}
+		free(node->blocks);		// i know these are NULLS !
 	}
-	free(node->blocks);
 
 	free(node);
 }
@@ -486,13 +411,13 @@ void test() {
 	// HTMLDoc doc = parseHtml(demo_html);
 
 	// print_node(doc.root);
-	bool h = is_void_tag("hr");
-	printf("is VOID : %d\n", h);
+	// bool h = is_void_tag("hr");
+	// printf("is VOID : %d\n", h);
 
 	char *p;
 	NODE *html = parse_tag_rec("<h1>Hello <p> this si the ultimate test ! </br>  </p>World !</h1>", &p);
 
 	print_node(html);
 	print_node(html->children[0]->children[0]);
-	free_nodes_rec(html); // NODE *html has the .tagName string allocated on the STACK !
+	free_nodes_rec(html);
 }
