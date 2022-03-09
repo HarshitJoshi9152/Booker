@@ -108,9 +108,11 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 		}
 
 		// value block allocation.
-		char* value =  alloc_string(val_start, val_len);
-		BLOCK *value_block = alloc_block(STRING, (union type_val){value});
-		blocks[blocks_count++] = value_block;
+		if (val_len > 0) {
+			char* value =  alloc_string(val_start, val_len);
+			BLOCK *value_block = alloc_block(STRING, (union type_val){value});
+			blocks[blocks_count++] = value_block;
+		}
 
 		// CHILD TAG OR ENDING TAG STARTS
 		// *cursor == '<'
@@ -229,7 +231,7 @@ NODE *alloc_node_from_blocks(char* tagName, BLOCK **blocks, u64 blocks_count)
 		switch (type)
 		{
 			case TAG:
-				children[children_i] = block->value.tag;
+				children[children_i++] = block->value.tag;
 				break;
 
 			case STRING:
@@ -364,6 +366,19 @@ void print_node(NODE *node)
 
 }
 
+void print_node_structure(NODE *node, u64 depth, char* padding)
+{
+	printf("%s%s\n", padding, node->tagName);
+	depth++;
+
+	for (u64 i = 0; i < node->childrenCount; ++i) {
+		char* child_padding = calloc(depth, 1);
+		memset(child_padding, '\t', depth);
+		child_padding[depth - 1] = 0;
+		print_node_structure(node->children[i], depth, child_padding);
+		free(child_padding);
+	}
+}
 
 void nodes_test()
 {
@@ -396,15 +411,7 @@ void nodes_test()
 }
 
 void test() {
-	const char* demo_html = "\t<!DOCTYPE html> \n\
-	<html>\n\
-	<body>\n\
-	\n\
-	<h1>My First Heading</h1>\n\
-	<p>My first paragraph.</p>\n\
-	\n\
-	</body>\n\
-	</html>";
+	const char* demo_html = "<html><body><h1>My First Heading</h1><p>My first paragraph.</p></body></html>";
 
 	printf("%s\n", demo_html);
 
@@ -415,9 +422,12 @@ void test() {
 	// printf("is VOID : %d\n", h);
 
 	char *p;
-	NODE *html = parse_tag_rec("<h1>Hello <p> this si the ultimate test ! </br>  </p>World !</h1>", &p);
+	// NODE *html = parse_tag_rec("<h1>Hello <p> this si <i>the</i> ultimate test ! </br>  </p>World !</h1>", &p);
+	NODE *html = parse_tag_rec(demo_html, &p);
 
-	print_node(html);
-	print_node(html->children[0]->children[0]);
+	// print_node(html);
+	// print_node(html->children[0]->children[1]);
+	print_node_structure(html, 1, "");
+	// printf("\n%d\n", html->children[0]);
 	free_nodes_rec(html);
 }
