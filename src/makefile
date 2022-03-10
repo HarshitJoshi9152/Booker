@@ -6,7 +6,7 @@ CFLAGS=-Wall -g
 build_dir=../build
 DEPS=html.h
 
-_OBJ=html.o main.o bookmark.o
+_OBJ=html.o main.o bookmark.o hashtable.o
 OBJ= $(patsubst %, $(build_dir)/%, $(_OBJ));
 
 

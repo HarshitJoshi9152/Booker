@@ -40,13 +40,6 @@ const u64 MAX_BLOCK_COUNT = 10;
 
 // <parsing html>
 
-char *alloc_string(char *str, u64 len) {
-	char *p = malloc(len + 1);
-	strncpy(p, str, len);
-	p[len] = 0;
-	return p;
-}
-
 bool is_void_tag(char *tag_name)
 {
 	for (u64 i = 0; i < void_tags_len; ++i)
@@ -88,7 +81,7 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 		cursor++;
 	}
 
-	char *opening_tag_name = alloc_string(name_start, name_len);
+	char *opening_tag_name = strndup(name_start, name_len);
 
 	// determine using a hash_table if its a singleton and return immediately if it is .
 	if (is_void_tag(opening_tag_name))
@@ -134,7 +127,7 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 
 		// value block allocation.
 		if (val_len > 0) {
-			char* value =  alloc_string(val_start, val_len);
+			char* value =  strndup(val_start, val_len);
 			BLOCK *value_block = alloc_block(STRING, (union type_val){.string=value});
 			// check if blocks has enough space to allocate blocks !
 			if (blocks_count >= MAX_BLOCK_COUNT - 1) {
@@ -208,7 +201,7 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 		else
 		{
 			// CLOSING/VOID tag !
-			char *closing_tag_name = alloc_string(name_start, name_len);
+			char *closing_tag_name = strndup(name_start, name_len);
 
 			// check if its actually the matching CLOSING TAG for the opening tag.
 			if (!strcmp(closing_tag_name, opening_tag_name))
