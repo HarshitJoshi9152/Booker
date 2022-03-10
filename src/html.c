@@ -34,7 +34,7 @@ const char* void_tags[] = {
 	"track",
 	"wbr"
 };
-const void_tags_len = sizeof(void_tags)/sizeof(void_tags[0]);
+const u64 void_tags_len = sizeof(void_tags)/sizeof(void_tags[0]);
 
 const u64 MAX_BLOCK_COUNT = 10;
 
@@ -43,7 +43,7 @@ const u64 MAX_BLOCK_COUNT = 10;
 char *alloc_string(char *str, u64 len) {
 	char *p = malloc(len + 1);
 	strncpy(p, str, len);
-	p[len] = (char)NULL;
+	p[len] = 0;
 	return p;
 }
 
@@ -61,7 +61,9 @@ bool is_void_tag(char *tag_name)
 // tag starts at char '<' && char *tagEnd should point to '>'
 NODE* parse_tag_rec(const char* tag, char** tagEnd)
 {
-	char* cursor = tag;
+	// printf("Why does it fail !\n");
+	char* cursor = (char*)tag;
+	// printf("It doesnt !\n");
 	// get the opening_tag_name first
 	if (*cursor != '<') {
 		fprintf(stderr, "Invalid Start of Tag, '<' expected %s:%d", __FILE__, __LINE__);
@@ -72,9 +74,17 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 	cursor += 1; 							// to get started on the tagname;
 	char *name_start = cursor;
 	u64 name_len = 0;
+	bool space_found = false;
+	// bool recording_name = false; // lets ignore any possbile whitespaces btw <>(s) for now.
 
 	while(*cursor != '>') {  // not parsing attributes currently
-		name_len += 1;
+		if (*cursor == '\0')
+		{
+			fprintf(stderr, "WHAT IN THE ACTUAL FUCK !!");
+			exit(1);
+		}
+		if (isspace(*cursor)) space_found = true;
+		if (!space_found) name_len += 1;
 		cursor++;
 	}
 
@@ -83,13 +93,12 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 	// determine using a hash_table if its a singleton and return immediately if it is .
 	if (is_void_tag(opening_tag_name))
 	{
-		NODE *n = alloc_node(opening_tag_name, NULL, NULL, NULL);
+		NODE *n = alloc_node(opening_tag_name, (char*)NULL, (u64)NULL, (NODE**)NULL);
 		*tagEnd = cursor;
 		return n;
 	}
 
 	// *cursor == '>'
-	const char const *addr_val_start = cursor;
 	bool tagClosed = false;
 
 	BLOCK **blocks = malloc(MAX_BLOCK_COUNT * sizeof(BLOCK*));
@@ -98,19 +107,42 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 	u64 children_count = 0;
 
 	do {
-
+		
+		// this is the cause !! when the tag remains unclosed ! the loop continues and the cursor keeps on iterating oven char *tag
+		// considering any subsequent tag encountered to be a child tag, (in case its a singleton the loop continues but if its a child tag a recursive call is made)
+		// which pile on and on and then inevitably reach the end of the *tag string and return NULL, the previous function on the stack frame continues execution 
+		// and adds 1 to the cursor (which was already NULL !!), (may or may not return, as its based on memory now !!! UNDEFINED BEHAVIOUR) and the cycle continues until we encounter a SEG_FAULT;
 		char *val_start = ++cursor; // *cursor == '>' thats why we increment by 1;
+		// char *val_start = (*cursor != NULL) && ++cursor || cursor; // *cursor == '>' thats why we increment by 1;
 		u64 val_len = 0;
 
+		// special forces lmao
+		bool brk = false;
+
 		while(*cursor != '<') {
+			if (*cursor == '\0')
+			{
+				fprintf(stderr, "WTF HOW FAST DOES LIFE MOVE ! :%d:\n", __LINE__);
+				brk = true;
+				break;
+			}
 			val_len++;
 			cursor++;
 		}
 
+		if (brk) break;
+
 		// value block allocation.
 		if (val_len > 0) {
 			char* value =  alloc_string(val_start, val_len);
-			BLOCK *value_block = alloc_block(STRING, (union type_val){value});
+			BLOCK *value_block = alloc_block(STRING, (union type_val){.string=value});
+			// check if blocks has enough space to allocate blocks !
+			if (blocks_count >= MAX_BLOCK_COUNT - 1) {
+				// realloc 
+				// BLOCK **blocks_addr = blocks;
+				blocks = realloc(blocks, 2 * blocks_count * sizeof(BLOCK*));
+				// memcpy(blocks, blocks_addr, sizeof(blocks));
+			}
 			blocks[blocks_count++] = value_block;
 		}
 
@@ -121,21 +153,39 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 
 		while(*cursor == '/' || isspace(*cursor))
 		{
+			if (*cursor == '\0')
+			{
+				fprintf(stderr, "WTF HOW FAST DOES LIFE MOVE ! :%d:\n", __LINE__);
+				brk = true;
+				break;
+			}
+
 			if (*cursor == '/') is_closing_tag = true;
 			cursor++;
 		}
+
+		if (brk) break;
 
 		// *cursor == '(first alpha char !)';
 		char *name_start = cursor; // first char of tagname
 		u64 name_len = 0;
 
-		while(*cursor != '>') {  // not parsing attributes currently
+		while(*cursor != '>')
+		{
+			if (*cursor == '\0')
+			{
+				fprintf(stderr, "WTF HOW FAST DOES LIFE MOVE ! :%d:\n", __LINE__);
+				brk = true;
+				break;
+			}
 			name_len += 1;
 			cursor++;
 		}
+
+		if (brk) break;
 		// *cursor == '>' now, which is exactly what we need it to be for going in the next iteration of the loop.
 		// todo: remove
-		// printf("\nCALLED %p %c %s %d\n", cursor, *cursor, closing_tag_name, is_closing_tag);
+		// printf("\nCALLED %p %c %d\n", cursor, *cursor, is_closing_tag);
 
 		// compare the $opening_tag_name with this tagname.
 		if (!is_closing_tag)
@@ -146,6 +196,10 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 			cursor = addr_child_tag_end;	// jumping to the end of the childtag !
 
 			BLOCK *node_block = alloc_block(TAG, (union type_val){child_tag});
+			// check if blocks has enough space to allocate blocks !
+			if (blocks_count  >= MAX_BLOCK_COUNT - 1) {
+				blocks = realloc(blocks, 2 * blocks_count * sizeof(BLOCK*));
+			}
 			blocks[blocks_count++] = node_block;
 
 			children_count++;
@@ -169,10 +223,15 @@ NODE* parse_tag_rec(const char* tag, char** tagEnd)
 				// todo: much better to alloc/make the tag here only ! coz its a singelton with '/'
 				// and we will have to work again to seperate '/' and other ws chars from it !
 
-				if (is_void_tag) {
-					NODE *child_tag = alloc_node(closing_tag_name, NULL, NULL, NULL); // closing_tag_name NEVER GOT ALLOCED !
+				if (is_void) {
+					NODE *child_tag = alloc_node(closing_tag_name, (char*)NULL, (u64)NULL, (NODE**)NULL); // closing_tag_name NEVER GOT ALLOCED !
 					BLOCK *node_block = alloc_block(TAG, (union type_val){child_tag});
 
+					// check if blocks has enough space to allocate blocks !
+					if (blocks_count  >= MAX_BLOCK_COUNT - 1) {
+						// realloc 
+						blocks = realloc(blocks, 2 * blocks_count * sizeof(BLOCK*));
+					}
 					blocks[blocks_count++] = node_block;
 					children_count++;
 				} else {
@@ -318,16 +377,15 @@ void free_HTML(HTMLDoc *doc)
 void print_node(NODE *node)
 {
 	printf("_node {\n");
-	printf("\telmType: %s\n", node->tagName);
-	printf("\tvalue: %s\n", node->value);
+	printf("\telmType: \"%s\"\n", node->tagName);
+	printf("\tvalue: \"%s\"\n", node->value);
 	printf("\tcc: %ld\n", node->childrenCount);
 
 	NODE **children = node->children;
 	u64 childrenCount = node->childrenCount;
 
 	if (children == NULL || childrenCount == (intptr_t)NULL) {
-		// childrenCount = 0;
-			printf("};\n");
+		printf("};\n");
 		return;
 	}
 
@@ -410,23 +468,16 @@ void nodes_test()
 	free(doc.root);
 }
 
-void test() {
-	const char* demo_html = "<html><body><h1>My First Heading</h1><p>My first paragraph.</p></body></html>";
-
-	printf("%s\n", demo_html);
-
-	// HTMLDoc doc = parseHtml(demo_html);
-
-	// print_node(doc.root);
+void test(char *file) {
 	// bool h = is_void_tag("hr");
 	// printf("is VOID : %d\n", h);
 
 	char *p;
 	// NODE *html = parse_tag_rec("<h1>Hello <p> this si <i>the</i> ultimate test ! </br>  </p>World !</h1>", &p);
-	NODE *html = parse_tag_rec(demo_html, &p);
+	NODE *html = parse_tag_rec(file, &p);
 
 	// print_node(html);
-	// print_node(html->children[0]->children[1]);
+	print_node(html->children[1]->children[3]->children[0]);
 	print_node_structure(html, 1, "");
 	// printf("\n%d\n", html->children[0]);
 	free_nodes_rec(html);

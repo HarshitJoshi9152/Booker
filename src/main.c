@@ -8,7 +8,7 @@
 #include "html.h"
 
 // #define PATH "C:\\Users\\Harshit\\code\\projects\\Booker\\res\\bookmarks.html"
-#define PATH "/mnt/c/Users/Harshit/code/projects/Booker/res/bookmarks.html"
+#define PATH "/mnt/c/Users/Harshit/code/projects/Booker/res/bookmarks-washed.html"
 
 // store the exported bookmarks_contents
 char *b_contents;
@@ -46,13 +46,13 @@ int main(int argc, char *argv[])
 {
 	atexit(&_cleanup); // return must be 0
 
-	// b_contents = readFile(PATH);
+	b_contents = readFile(PATH);
 
 	// printf("---------------FILE-START------------\n");
 	// printf("%s\n", b_contents);
 	// printf("---------------FILE-END------------\n");
 
-	test();
+	test(b_contents);
 	
 	return EXIT_SUCCESS;
 }

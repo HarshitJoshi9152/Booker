@@ -54,4 +54,4 @@ bool is_void_tag(char *tag_name);
 BLOCK *alloc_block(enum VAL_TYPE type, union type_val value);
 
 void nodes_test();
-void test();
+void test(char* file);
